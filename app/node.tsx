@@ -31,6 +31,7 @@ type RestProps = {
   handleAdd: (prefix: string, name: string, type: Category) => void;
   handleRemove: (prefix: string) => void;
   handleRename: (prefix: string, newName: string) => void;
+  checkPresence: (prefix: string, name: string, type: Category) => boolean;
 };
 
 type Category = "file" | "folder";
@@ -44,7 +45,7 @@ export default function Node({
     <ul className="flex flex-col gap-3 pl-6 pt-2">
       {dir.map((it) => (
         <FolderOrFile
-          key={it.name}
+          key={it.name + it.type}
           item={it}
           prefix={prefix == "" ? it.name : prefix + "/" + it.name}
           {...rest}
@@ -68,7 +69,7 @@ function FolderOrFile({
     rename: false,
   });
   const [selectedType, setSelectedType] = useState<"file" | "folder">();
-  const { handleAdd, handleRemove, handleRename } = rest;
+  const { handleAdd, handleRemove, handleRename, checkPresence } = rest;
 
   return (
     <>
@@ -137,6 +138,7 @@ function FolderOrFile({
         )}
       </li>
       <RenameDialog
+        type={item.type}
         currentName={item.name}
         isOpen={dialogStates.rename}
         onSave={(val) => {
@@ -146,9 +148,14 @@ function FolderOrFile({
         handleOpen={(val) =>
           setDialogStates((prev) => ({ ...prev, rename: val }))
         }
+        isAlreadyPresent={(val) => checkPresence(prefix!, val, item.type)}
       />
       {selectedType && (
         <AddDilaog
+          key={selectedType + dialogStates.add}
+          defaultFolderName={
+            selectedType == "file" ? "untitled.txt" : "newfolder"
+          }
           type={selectedType}
           isOpen={dialogStates.add}
           onSave={(val) => {
@@ -159,6 +166,7 @@ function FolderOrFile({
           handleOpen={(val) =>
             setDialogStates((prev) => ({ ...prev, add: val }))
           }
+          isAlreadyPresent={(val) => checkPresence(prefix!, val, selectedType)}
         />
       )}
     </>
@@ -167,8 +175,18 @@ function FolderOrFile({
 
 export function FileSystemModule({ struct }: { struct: Struct }) {
   const [data, setData] = useState(struct);
+  const [dialogStates, setDialogStates] = useState({
+    add: false,
+  });
+  const [selectedType, setSelectedType] = useState<"file" | "folder">();
 
   function handleAdd(prefix: string, name: string, type: Category) {
+    if (prefix.length == 0) {
+      const copydata = [...data];
+      copydata.push({ name, type });
+      setData(copydata);
+      return;
+    }
     const paths = prefix.split("/");
     const newdata = structuredClone(data);
     let temp: Struct = newdata;
@@ -228,13 +246,74 @@ export function FileSystemModule({ struct }: { struct: Struct }) {
     setData(newdata);
   }
 
+  function checkPresence(prefix: string, name: string, type: Category) {
+    if (prefix.length == 0) {
+      return !!data.find((it) => it.name == name && it.type == type);
+    }
+    const paths = prefix.split("/");
+    const newdata = structuredClone(data);
+    let temp: Struct = newdata;
+    paths.forEach((it) => {
+      const something = temp.find((item) => item.name == it)!;
+      if (something.type == "folder") {
+        temp = something.items ?? [];
+      }
+    });
+    return !!temp.find((it) => it.name == name && it.type == type);
+  }
+
   return (
-    <Node
-      dir={data}
-      handleAdd={handleAdd}
-      handleRemove={handleDelete}
-      handleRename={handleRename}
-    />
+    <div>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div className="ml-4 mb-1.5 cursor-pointer">dir/root</div>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem
+            onClick={() => {
+              setDialogStates((prev) => ({ ...prev, add: true }));
+              setSelectedType("folder");
+            }}
+          >
+            Add folder
+          </ContextMenuItem>
+          <ContextMenuItem
+            onClick={() => {
+              setDialogStates((prev) => ({ ...prev, add: true }));
+              setSelectedType("file");
+            }}
+          >
+            Add file
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+
+      {selectedType && (
+        <AddDilaog
+          key={selectedType + dialogStates.add}
+          defaultFolderName={
+            selectedType == "file" ? "untitled.txt" : "newfolder"
+          }
+          type={selectedType}
+          isOpen={dialogStates.add}
+          onSave={(val) => {
+            handleAdd("", val, selectedType);
+            setDialogStates((prev) => ({ ...prev, add: false }));
+          }}
+          handleOpen={(val) =>
+            setDialogStates((prev) => ({ ...prev, add: val }))
+          }
+          isAlreadyPresent={(val) => checkPresence("", val, selectedType)}
+        />
+      )}
+      <Node
+        dir={data}
+        handleAdd={handleAdd}
+        handleRemove={handleDelete}
+        handleRename={handleRename}
+        checkPresence={checkPresence}
+      />
+    </div>
   );
 }
 
@@ -243,13 +322,24 @@ function RenameDialog({
   isOpen,
   currentName,
   handleOpen,
+  isAlreadyPresent,
+  type,
 }: {
   isOpen: boolean;
   handleOpen: (val: boolean) => void;
   onSave: (name: string) => void;
   currentName: string;
+  isAlreadyPresent: (val: string) => boolean;
+  type: Category;
 }) {
   const [name, setName] = useState(currentName);
+  const [isDuplicate, setIsDuplicate] = useState(false);
+
+  useEffect(() => {
+    const check = name == currentName ? false : isAlreadyPresent(name);
+    setIsDuplicate(check);
+  }, [name, isAlreadyPresent, currentName]);
+
   return (
     <Dialog open={isOpen} onOpenChange={handleOpen}>
       <DialogContent className="sm:max-w-[425px]">
@@ -265,13 +355,21 @@ function RenameDialog({
           <Input
             type="text"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => {
+              setName(e.target.value);
+            }}
             id="name"
             className="col-span-3"
           />
+          <p className="text-red-600">
+            {isDuplicate && `${type} named ${name} is already present`}
+          </p>
         </div>
         <DialogFooter>
-          <Button disabled={!name} onClick={() => onSave(name)}>
+          <Button
+            disabled={!name || isDuplicate || name == currentName}
+            onClick={() => onSave(name)}
+          >
             Save changes
           </Button>
         </DialogFooter>
@@ -285,17 +383,23 @@ function AddDilaog({
   isOpen,
   handleOpen,
   type,
+  defaultFolderName,
+  isAlreadyPresent,
 }: {
   isOpen: boolean;
   handleOpen: (val: boolean) => void;
   type: Category;
   onSave: (name: string) => void;
+  defaultFolderName: string;
+  isAlreadyPresent: (val: string) => boolean;
 }) {
-  const [name, setName] = useState("");
+  const [name, setName] = useState(defaultFolderName);
+  const [isDuplicate, setIsDuplicate] = useState(false);
 
   useEffect(() => {
-    setName("");
-  }, [isOpen]);
+    const check = isAlreadyPresent(name);
+    setIsDuplicate(check);
+  }, [name, isAlreadyPresent]);
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpen}>
@@ -309,13 +413,18 @@ function AddDilaog({
           <Input
             type="text"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => {
+              setName(e.target.value);
+            }}
             id="name"
             className="col-span-3"
           />
+          <p className="text-red-600">
+            {isDuplicate && `${type} named ${name} is already present`}
+          </p>
         </div>
         <DialogFooter>
-          <Button disabled={!name} onClick={() => onSave(name)}>
+          <Button disabled={!name || isDuplicate} onClick={() => onSave(name)}>
             Save changes
           </Button>
         </DialogFooter>
