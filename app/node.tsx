@@ -7,7 +7,7 @@ import {
   FolderIcon,
 } from "lucide-react";
 import { File, Folder, Struct } from "./file-system";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -292,6 +292,11 @@ function AddDilaog({
   onSave: (name: string) => void;
 }) {
   const [name, setName] = useState("");
+
+  useEffect(() => {
+    setName("");
+  }, [isOpen]);
+
   return (
     <Dialog open={isOpen} onOpenChange={handleOpen}>
       <DialogContent className="sm:max-w-[425px]">
