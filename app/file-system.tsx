@@ -1,4 +1,4 @@
-import Node from "./node";
+import Node, { FileSystemModule } from "./node";
 
 export type File = {
   name: string;
@@ -139,8 +139,12 @@ const rootDir: Struct = [
     name: "package-lock.json",
     type: "file",
   },
+  {
+    name: "empty folder",
+    type: "folder",
+  },
 ];
 
 export default function FileSystem() {
-  return <Node dir={rootDir} />;
+  return <FileSystemModule struct={rootDir} />;
 }
