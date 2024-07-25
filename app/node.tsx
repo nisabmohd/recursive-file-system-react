@@ -31,7 +31,12 @@ type RestProps = {
   handleAdd: (prefix: string, name: string, type: Category) => void;
   handleRemove: (prefix: string) => void;
   handleRename: (prefix: string, newName: string) => void;
-  checkPresence: (prefix: string, name: string, type: Category) => boolean;
+  checkPresence: (
+    prefix: string,
+    name: string,
+    type: Category,
+    isRename?: boolean
+  ) => boolean;
 };
 
 type Category = "file" | "folder";
@@ -148,7 +153,7 @@ function FolderOrFile({
         handleOpen={(val) =>
           setDialogStates((prev) => ({ ...prev, rename: val }))
         }
-        isAlreadyPresent={(val) => checkPresence(prefix!, val, item.type)}
+        isAlreadyPresent={(val) => checkPresence(prefix!, val, item.type, true)}
       />
       {selectedType && (
         <AddDilaog
@@ -246,11 +251,17 @@ export function FileSystemModule({ struct }: { struct: Struct }) {
     setData(newdata);
   }
 
-  function checkPresence(prefix: string, name: string, type: Category) {
+  function checkPresence(
+    prefix: string,
+    name: string,
+    type: Category,
+    isRename?: boolean
+  ) {
+    let paths = prefix.split("/");
     if (prefix.length == 0) {
       return !!data.find((it) => it.name == name && it.type == type);
     }
-    const paths = prefix.split("/");
+    if (isRename) paths = paths.slice(0, paths.length - 1);
     const newdata = structuredClone(data);
     let temp: Struct = newdata;
     paths.forEach((it) => {
